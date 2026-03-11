@@ -1,9 +1,31 @@
-# Environments
-.env
-.envrc
-.venv
-env/
+# -----------------------------
+# PYTHON & ENVIRONMENTS
+# -----------------------------
+__pycache__/
+*.py[cod]
+*$py.class
+.venv/
 venv/
-ENV/
-env.bak/
-venv.bak/
+env/
+
+# -----------------------------
+# SECRETS
+# -----------------------------
+.env
+
+# -----------------------------
+# AIRFLOW
+# -----------------------------
+airflow/dags/__pycache__/
+airflow/logs
+airflow/airflow.db
+airflow/airflow.cfg
+airflow/webserver_config.py
+airflow/airflow-webserver.pid
+airflow/standalone_admin_password.txt
+
+# -----------------------------
+# IDE & OS FILES
+# -----------------------------
+.vscode/
+.DS_Store
