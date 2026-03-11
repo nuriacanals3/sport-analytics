@@ -13,6 +13,12 @@ Automatic pipeline with NBA data using Airflow.
 pip install -r requirements.txt
 ```
 
+## Airflow
+Initialize
+```
+airflow standalone
+```
+
 ## Arquitecture
 MDS Architecture:
 - Bronze layer: extracting NBA play-by-play data into S3.
