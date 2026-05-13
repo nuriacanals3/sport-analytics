@@ -10,35 +10,40 @@ player_actions as (
         team_id,
         team_tricode,
 
+        -- Made/missed split comes from action_type, not shot_result
         count(*) filter (
-            where action_type = 'freethrow' and shot_result = 'Made'
-        )                                                               as free_throws_made,
-        count(*) filter (
-            where action_type = 'freethrow'
-        )                                                               as free_throws_attempted,
-
-        count(*) filter (
-            where is_field_goal = true and shot_result = 'Made'
+            where action_type = 'Made Shot'
         )                                                               as field_goals_made,
         count(*) filter (
-            where is_field_goal = true
+            where action_type in ('Made Shot', 'Missed Shot')
         )                                                               as field_goals_attempted,
 
+        -- 3-pointers identified via '3PT' in description
         count(*) filter (
-            where is_field_goal = true
-            and shot_result = 'Made'
-            and sub_type = '3pt'
+            where action_type = 'Made Shot'
+            and description like '%3PT%'
         )                                                               as three_pointers_made,
         count(*) filter (
-            where is_field_goal = true and sub_type = '3pt'
+            where action_type in ('Made Shot', 'Missed Shot')
+            and description like '%3PT%'
         )                                                               as three_pointers_attempted,
 
-        count(*) filter (where action_type = 'rebound')                as rebounds,
-        count(*) filter (where action_type = 'assist')                 as assists,
-        count(*) filter (where action_type = 'turnover')               as turnovers,
-        count(*) filter (where action_type = 'block')                  as blocks,
-        count(*) filter (where action_type = 'steal')                  as steals,
-        count(*) filter (where action_type = 'foul')                   as fouls
+        -- Free throws: missed ones have description starting with 'MISS'
+        count(*) filter (
+            where action_type = 'Free Throw'
+            and description not like 'MISS%'
+        )                                                               as free_throws_made,
+        count(*) filter (
+            where action_type = 'Free Throw'
+        )                                                               as free_throws_attempted,
+
+        count(*) filter (where action_type = 'Rebound')                as rebounds,
+        count(*) filter (where action_type = 'Turnover')               as turnovers,
+        count(*) filter (where action_type = 'Foul')                   as fouls
+
+        -- Assists, blocks, steals are attributes of other actions in NBA PBP v3,
+        -- not separate action types. They require extracting assist/block/steal
+        -- person IDs from the raw JSON — a future enhancement.
 
     from pbp
     where player_id is not null and player_id != ''
@@ -58,10 +63,7 @@ select
     free_throws_made,
     free_throws_attempted,
     rebounds,
-    assists,
     turnovers,
-    blocks,
-    steals,
     fouls,
     (field_goals_made - three_pointers_made) * 2
         + three_pointers_made * 3

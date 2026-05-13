@@ -23,10 +23,8 @@ select
     sum(ps.free_throws_made)                                    as team_ft_made,
     sum(ps.free_throws_attempted)                               as team_ft_attempted,
     sum(ps.rebounds)                                            as team_rebounds,
-    sum(ps.assists)                                             as team_assists,
     sum(ps.turnovers)                                           as team_turnovers,
-    sum(ps.blocks)                                              as team_blocks,
-    sum(ps.steals)                                              as team_steals,
+    sum(ps.fouls)                                               as team_fouls,
     count(distinct ps.player_id)                                as players_in_game,
     gs.periods_played,
     gs.went_to_overtime
