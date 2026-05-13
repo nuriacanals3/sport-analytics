@@ -1,7 +1,7 @@
 with raw as (
     select
         game->>'gameId'        as game_id,
-        unnest(game->'actions') as action
+        unnest(cast(game->'actions' as json[])) as action
     from read_json_auto(
         's3://' || '{{ env_var("S3_BUCKET_NAME") }}' || '/bronze/nba_pbp/*.json',
         format = 'auto'

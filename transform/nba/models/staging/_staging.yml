@@ -15,7 +15,8 @@ models:
         tests:
           - not_null
           - accepted_values:
-              values: [1, 2, 3, 4, 5, 6, 7]
+              arguments:
+                values: [1, 2, 3, 4, 5, 6, 7]
       - name: action_type
         description: "Type of action (2pt, 3pt, freethrow, rebound, assist, etc.)"
         tests: [not_null]
