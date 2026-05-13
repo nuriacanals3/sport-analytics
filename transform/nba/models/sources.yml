@@ -1,0 +1,8 @@
+version: 2
+
+sources:
+  - name: bronze
+    description: "Raw NBA play-by-play JSON files stored in S3 by the ingestion pipeline"
+    tables:
+      - name: nba_pbp
+        description: "One JSON file per game. Path: s3://{S3_BUCKET_NAME}/bronze/nba_pbp/pbp_{game_id}_{date}.json"

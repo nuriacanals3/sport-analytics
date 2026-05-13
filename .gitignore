@@ -25,6 +25,15 @@ airflow/airflow-webserver.pid
 airflow/standalone_admin_password.txt
 
 # -----------------------------
+# DBT
+# -----------------------------
+transform/*/target/
+transform/*/dbt_packages/
+transform/*/logs/
+transform/*/profiles.yml
+transform/*/nba.duckdb
+
+# -----------------------------
 # IDE & OS FILES
 # -----------------------------
 .vscode/

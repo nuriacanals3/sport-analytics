@@ -1,0 +1,25 @@
+version: 2
+
+models:
+  - name: stg_nba__play_by_play
+    description: "Cleaned and flattened NBA play-by-play actions. One row per game action."
+    columns:
+      - name: game_id
+        description: "Unique identifier for the game"
+        tests: [not_null]
+      - name: action_number
+        description: "Sequential action number within the game"
+        tests: [not_null]
+      - name: period
+        description: "Game period (1-4 regulation, 5+ overtime)"
+        tests:
+          - not_null
+          - accepted_values:
+              values: [1, 2, 3, 4, 5, 6, 7]
+      - name: action_type
+        description: "Type of action (2pt, 3pt, freethrow, rebound, assist, etc.)"
+        tests: [not_null]
+      - name: clock_raw
+        description: "Raw clock value in ISO 8601 duration format, e.g. PT10M23.00S"
+      - name: clock_seconds_elapsed
+        description: "Seconds elapsed in the current period (derived from clock_raw)"

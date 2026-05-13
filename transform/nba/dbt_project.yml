@@ -1,0 +1,16 @@
+name: nba
+version: '1.0.0'
+config-version: 2
+
+profile: nba_duckdb
+
+model-paths: ["models"]
+macro-paths: ["macros"]
+test-paths: ["tests"]
+
+models:
+  nba:
+    staging:
+      +materialized: view
+    marts:
+      +materialized: table

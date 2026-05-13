@@ -1,0 +1,32 @@
+version: 2
+
+models:
+  - name: game_summary
+    description: "One row per game with final scores, winner location, point margin, and action counts"
+    columns:
+      - name: game_id
+        tests: [not_null, unique]
+      - name: final_score_home
+        tests: [not_null]
+      - name: final_score_away
+        tests: [not_null]
+      - name: winner_location
+        tests:
+          - accepted_values:
+              values: ['home', 'away', 'tie']
+
+  - name: player_game_stats
+    description: "Box score stats per player per game derived from play-by-play events"
+    columns:
+      - name: game_id
+        tests: [not_null]
+      - name: player_id
+        tests: [not_null]
+
+  - name: team_game_stats
+    description: "Aggregated team performance per game, joined with game context"
+    columns:
+      - name: game_id
+        tests: [not_null]
+      - name: team_id
+        tests: [not_null]
