@@ -1,5 +1,6 @@
 version: 2
 
+# Silver: 1 model per bronze source, they clean/normalize them into tables
 models:
   - name: stg_nba__play_by_play
     description: "Cleaned and flattened NBA play-by-play actions. One row per game action."
@@ -24,3 +25,46 @@ models:
         description: "Raw clock value in ISO 8601 duration format, e.g. PT10M23.00S"
       - name: clock_seconds_elapsed
         description: "Seconds elapsed in the current period (derived from clock_raw)"
+
+  - name: stg_nba__game_log
+    description: "Cleaned team-game rows from LeagueGameLog. One row per team per game."
+    tests:
+      # Composite-key uniqueness via dbt's built-in `unique` test (a concat expression)
+      - unique:
+          column_name: "team_id || '-' || game_id"
+    columns:
+      - name: season
+        description: "Season string, e.g. '2024-25' (from the bronze filename)"
+        tests: [not_null]
+      - name: team_id
+        description: "NBA team ID"
+        tests: [not_null]
+      - name: game_id
+        description: "Unique identifier for the game (shared by both teams' rows)"
+        tests: [not_null]
+      - name: wl
+        description: "Win/loss result for this team"
+        tests:
+          - accepted_values:
+              arguments:
+                values: ['W', 'L']
+      - name: plus_minus
+        description: "Point margin for this team (positive = won by that margin)"
+        tests: [not_null]
+      - name: is_home
+        description: "True if this team was the home team, derived from MATCHUP"
+        tests: [not_null]
+
+  - name: stg_nba__team_season_stats
+    description: "One row per team per season, combining Base and Advanced LeagueDashTeamStats."
+    tests:
+      - unique:
+          column_name: "team_id || '-' || season"
+    columns:
+      - name: season
+        tests: [not_null]
+      - name: team_id
+        tests: [not_null]
+      - name: net_rating
+        description: "Pace-adjusted point differential per 100 possessions -- the team-strength control"
+        tests: [not_null]

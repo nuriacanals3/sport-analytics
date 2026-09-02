@@ -1,0 +1,57 @@
+version: 2
+
+# Gold: staging models get combined into materialized tables to query 
+models:
+  - name: team_travel_legs
+    description: "One row per team per game: distance, rest, back-to-back, timezone crossing, and road-trip context for that leg."
+    tests:
+      - unique:
+          column_name: "team_id || '-' || game_id"
+    columns:
+      - name: team_id
+        tests: [not_null]
+      - name: game_id
+        tests: [not_null]
+      - name: team_abbreviation
+        tests:
+          - relationships:
+              arguments:
+                to: ref('nba_arenas')
+                field: team_abbreviation
+      - name: is_back_to_back
+        description: "True when rest_days = 0 (played the day after the previous game)"
+      - name: distance_miles
+        description: "Haversine distance from the previous game's location to this one, in miles. Null for a team's first game of a season."
+
+  - name: team_travel_season_summary
+    description: "Per-team, per-season travel totals -- a diagnostic view, not the optimisation unit (see the travel-logistics plan, section 2)."
+    tests:
+      - unique:
+          column_name: "team_id || '-' || season"
+    columns:
+      - name: team_id
+        tests: [not_null]
+      - name: season
+        tests: [not_null]
+      - name: games_played
+        description: "Should be 82 for a full, uninterrupted regular season"
+
+  - name: fatigue_features
+    description: "Team-game grain with the opponent's row attached (self-join on game_id): differential fatigue/travel features, own/opponent net rating, home/away, and the target plus_minus. Built for Phase 3's cost model."
+    tests:
+      - unique:
+          column_name: "team_id || '-' || game_id"
+    columns:
+      - name: team_id
+        tests: [not_null]
+      - name: game_id
+        tests: [not_null]
+      - name: opponent_team_id
+        tests: [not_null]
+      - name: target_plus_minus
+        description: "The model's regression target: this team's point margin in the game"
+        tests: [not_null]
+      - name: self_net_rating
+        tests: [not_null]
+      - name: opponent_net_rating
+        tests: [not_null]

@@ -1,8 +1,12 @@
 # Sport Analytics
 
-A local data pipeline that fetches NBA play-by-play data from the NBA Stats API, transforms it with dbt, and produces aggregated game and season metrics.
+A local data pipeline that fetches NBA data from the NBA Stats API, transforms it with dbt, and produces aggregated game, player, and travel-logistics metrics.
 
-Built to learn the modern data stack end-to-end: Airflow for orchestration, S3 for raw storage, and dbt + DuckDB for transformation.
+Built to learn the modern data stack end-to-end: Airflow for orchestration, S3-compatible object storage for raw data, and dbt + DuckDB for transformation.
+
+Two things live here:
+1. **The core pipeline** — play-by-play ingestion → game/player/team box-score marts. Working, orchestrated daily.
+2. **Travel logistics** (in progress) — models NBA team travel across a season (distances, rest, back-to-backs, timezone crossings), and will eventually train a fatigue cost model and run schedule optimisation to explore lower-travel, lower-fatigue alternative schedules. See [docs/travel-logistics-plan.md](docs/travel-logistics-plan.md) for the full six-phase roadmap; Phases 1–2 (ingestion + dbt travel models) are done.
 
 ---
 
@@ -13,24 +17,34 @@ Medallion architecture (Bronze → Silver → Gold):
 ```
 NBA Stats API
       │
-      ▼
-[Bronze]  Raw JSON uploaded to S3
-          s3://bucket/bronze/nba_pbp/pbp_{game_id}_{date}.json
+      ├── play_by_play.py         ──▶ bronze/nba_pbp/*.json
+      ├── league_game_log.py      ──▶ bronze/nba_game_log/*.json
+      └── team_season_stats.py    ──▶ bronze/nba_team_stats/*.json
       │
       ▼
-[Silver]  dbt staging model — DuckDB reads S3 directly, flattens JSON
+[Bronze]  Raw JSON uploaded to an S3-compatible bucket (AWS S3, Backblaze B2, etc.)
+      │
+      ▼
+[Silver]  dbt staging models — DuckDB reads the bucket directly (httpfs), flattens JSON
+          ├── stg_nba__play_by_play
+          ├── stg_nba__game_log
+          └── stg_nba__team_season_stats
       │
       ▼
 [Gold]    dbt mart models — aggregated tables stored in DuckDB
-          ├── game_summary
-          ├── player_game_stats
-          └── team_game_stats
+          ├── game_summary, player_game_stats, team_game_stats
+          └── travel/
+              ├── team_travel_legs            (per-team-game: distance, rest, back-to-back, timezone crossing)
+              ├── team_travel_season_summary  (per-team-season totals — a diagnostic view)
+              └── fatigue_features            (team-game grain + opponent, differential features + target)
 ```
 
-Orchestrated by an **Airflow DAG** running daily at 08:00 UTC:
+Orchestrated by an **Airflow DAG** running daily at 08:00 UTC (currently wires up the play-by-play path; the travel-logistics ingestion/dbt models run manually for now — see [docs/travel-logistics-plan.md](docs/travel-logistics-plan.md) section 4 on why those stay out of the daily DAG):
 ```
 extract_nba_api_to_s3 → dbt_run_silver → dbt_run_gold → dbt_test
 ```
+
+**What's still ahead** (Phases 3–6 of the travel-logistics plan, not built yet): a Python cost model that learns fatigue weights from `fatigue_features`, a local-search schedule optimiser, a carbon/transport-scenario layer, and a Streamlit app reading precomputed results. None of this is dbt — it lives outside `transform/`, since dbt's job stops at producing the feature table.
 
 ---
 
@@ -40,9 +54,9 @@ extract_nba_api_to_s3 → dbt_run_silver → dbt_run_gold → dbt_test
 |-------|------|
 | Orchestration | Apache Airflow 2.8.1 |
 | Data source | [nba_api](https://github.com/swar/nba_api) |
-| Storage | AWS S3 + boto3 |
+| Storage | Any S3-compatible bucket (AWS S3, Backblaze B2, Cloudflare R2, ...) + boto3 |
 | Transformation | dbt-duckdb 1.10.1 |
-| Local warehouse | DuckDB (reads S3 via httpfs) |
+| Local warehouse | DuckDB (reads the bucket via `httpfs`) |
 | Language | Python 3.10 |
 
 ---
@@ -51,11 +65,21 @@ extract_nba_api_to_s3 → dbt_run_silver → dbt_run_gold → dbt_test
 
 ```
 sport-analytics/
-├── ingestion/nba/play_by_play.py     # Bronze: fetch from API and upload to S3
-├── airflow/dags/nba_pipeline_dag.py  # Airflow DAG chaining all layers
-└── transform/nba/                    # dbt project
-    ├── models/staging/               # Silver: clean and flatten raw JSON
-    └── models/marts/                 # Gold: aggregated game and player stats
+├── ingestion/nba/
+│   ├── play_by_play.py           # Bronze: play-by-play per game
+│   ├── league_game_log.py        # Bronze: team-game results per season
+│   ├── team_season_stats.py      # Bronze: team strength (Base + Advanced) per season
+│   └── config.py                 # Shared SEASONS list -- keeps the two above in sync
+├── airflow/dags/nba_pipeline_dag.py  # Airflow DAG chaining the play-by-play path
+├── docs/
+│   └── travel-logistics-plan.md  # Roadmap for the travel-logistics feature
+└── transform/nba/                # dbt project
+    ├── seeds/nba_arenas.csv      # Static arena coordinates, timezone, UTC offset
+    ├── macros/                   # Reusable SQL: parse_clock, haversine_miles
+    ├── models/staging/           # Silver: clean and flatten raw JSON
+    └── models/marts/
+        ├── game_summary.sql, player_game_stats.sql, team_game_stats.sql
+        └── travel/                # Gold: travel + fatigue models
 ```
 
 Adding a new sport means creating `ingestion/{sport}/` and `transform/{sport}/` — no changes to existing code.
@@ -65,15 +89,15 @@ Adding a new sport means creating `ingestion/{sport}/` and `transform/{sport}/` 
 ## Setup
 
 ### Prerequisites
-- Python 3.10+
-- AWS account with an S3 bucket and an IAM user with `s3:GetObject`, `s3:PutObject`, `s3:ListBucket` permissions
+- Python 3.10 specifically (not newer — `apache-airflow==2.8.1` doesn't support 3.12+; check with `python3.10 --version`, install via `brew install python@3.10` if missing)
+- An S3-compatible storage account with a bucket: AWS S3, or a free-forever alternative like [Backblaze B2](https://www.backblaze.com/sign-up) (10GB free, no expiring trial)
 
 ### Install
 
 ```bash
 git clone https://github.com/nuriacanals3/sport-analytics.git
 cd sport-analytics
-python -m venv venv
+python3.10 -m venv venv
 source venv/bin/activate
 pip install -r requirements.txt
 ```
@@ -83,10 +107,18 @@ pip install -r requirements.txt
 Create a `.env` file at the project root (already gitignored):
 
 ```
-AWS_ACCESS_KEY_ID=your_key
-AWS_SECRET_ACCESS_KEY=your_secret
+# Credentials -- names are generic S3-style even if using AWS directly.
+# For a non-AWS provider (Backblaze B2, Cloudflare R2, ...) these are still
+# just "access key id" / "secret access key" under a provider-specific name.
+B2_KEY_ID=your_key_id
+B2_APP_KEY=your_app_key
 S3_BUCKET_NAME=your-bucket-name
-AWS_REGION=eu-west-1
+S3_REGION=your-bucket-region          # e.g. eu-west-1 (AWS) or eu-central-003 (B2)
+
+# Only needed for a non-AWS S3-compatible provider. Leave unset for real AWS S3.
+S3_ENDPOINT_URL=https://s3.<region>.<provider-domain>   # full URL, used by boto3
+S3_ENDPOINT=s3.<region>.<provider-domain>                # host only, used by DuckDB httpfs
+S3_URL_STYLE=path                                         # most non-AWS providers need "path"
 ```
 
 Create `transform/nba/profiles.yml` (already gitignored):
@@ -97,13 +129,15 @@ nba_duckdb:
   outputs:
     dev:
       type: duckdb
-      path: /absolute/path/to/sport-analytics/transform/nba/nba.duckdb
+      path: nba.duckdb
       extensions:
         - httpfs
       settings:
-        s3_region: "{{ env_var('AWS_REGION', 'eu-west-1') }}"
-        s3_access_key_id: "{{ env_var('AWS_ACCESS_KEY_ID') }}"
-        s3_secret_access_key: "{{ env_var('AWS_SECRET_ACCESS_KEY') }}"
+        s3_region: "{{ env_var('S3_REGION', 'eu-west-1') }}"
+        s3_access_key_id: "{{ env_var('B2_KEY_ID') }}"
+        s3_secret_access_key: "{{ env_var('B2_APP_KEY') }}"
+        s3_endpoint: "{{ env_var('S3_ENDPOINT', '') }}"
+        s3_url_style: "{{ env_var('S3_URL_STYLE', 'vhost') }}"
 ```
 
 ### Initialize Airflow
@@ -123,17 +157,24 @@ export $(cat .env | xargs)
 source venv/bin/activate
 ```
 
-**Full pipeline via Airflow:** trigger the `nba_pipeline_daily` DAG from the UI.
+**Full play-by-play pipeline via Airflow:** trigger the `nba_pipeline_daily` DAG from the UI.
 
 **Or run each step manually:**
 ```bash
-# Bronze
-python ingestion/nba/play_by_play.py
+# Bronze -- play-by-play
+python -m ingestion.nba.play_by_play
+
+# Bronze -- travel-logistics sources (multi-season, run once per analysis, not daily)
+python -m ingestion.nba.league_game_log
+python -m ingestion.nba.team_season_stats
+
+# Seed -- arena coordinates (needed before travel models)
+dbt seed --project-dir transform/nba --profiles-dir transform/nba
 
 # Silver
 dbt run --select staging --project-dir transform/nba --profiles-dir transform/nba
 
-# Gold
+# Gold -- this already includes travel/ (it's nested under marts/)
 dbt run --select marts --project-dir transform/nba --profiles-dir transform/nba
 
 # Tests
@@ -144,7 +185,7 @@ dbt test --project-dir transform/nba --profiles-dir transform/nba
 
 ## Querying the Data
 
-Gold tables are stored in `transform/nba/nba.duckdb`:
+Gold tables are stored in `transform/nba/nba.duckdb` — mart tables (`game_summary`, `team_travel_legs`, `fatigue_features`, ...) are physically materialized there, so they need no credentials to query. Staging models are DuckDB *views* — querying them re-reads the bucket live, so they need `httpfs` credentials set first.
 
 ```python
 import duckdb
@@ -156,6 +197,15 @@ con.execute("SELECT player_name, team_tricode, points_scored FROM player_game_st
 
 # Games that went to overtime
 con.execute("SELECT game_id, final_score_home, final_score_away, periods_played FROM game_summary WHERE went_to_overtime = true").df()
+
+# Which teams travel the most?
+con.execute("SELECT team_abbreviation, total_miles, total_back_to_backs FROM team_travel_season_summary WHERE season = '2024-25' ORDER BY total_miles DESC LIMIT 10").df()
+```
+
+**Exploring interactively:** `transform/nba/open_duckdb.sh` opens a DuckDB CLI session with bucket credentials pre-loaded (needed only for the staging views — mart tables work with a plain `duckdb nba.duckdb`, no script needed):
+```bash
+cd transform/nba
+./open_duckdb.sh
 ```
 
 See [docs/querying.md](docs/querying.md) for more example queries and a full column reference.
@@ -166,6 +216,7 @@ See [docs/querying.md](docs/querying.md) for more example queries and a full col
 
 Detailed documentation is in the [`docs/`](docs/) folder:
 
+- [**docs/travel-logistics-plan.md**](docs/travel-logistics-plan.md) — the six-phase roadmap for the travel/fatigue/optimisation feature: what's built, what's next, and the design principles behind it
 - [**docs/architecture.md**](docs/architecture.md) — how each layer works, data flow, design decisions
 - [**docs/dbt_models.md**](docs/dbt_models.md) — dbt concepts, model explanations, how to add new models
 - [**docs/querying.md**](docs/querying.md) — how to query the data, column reference, example queries

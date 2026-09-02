@@ -1,5 +1,6 @@
 version: 2
 
+# Gold: staging models get combined into materialized tables to query (joins, aggregations...)
 models:
   - name: game_summary
     description: "One row per game with final scores, winner location, point margin, and action counts"

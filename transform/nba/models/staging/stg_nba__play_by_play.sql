@@ -1,3 +1,4 @@
+-- Gets the jsons of /bronze/nba_pbp/*
 with raw as (
     select
         game->>'gameId'        as game_id,
@@ -8,6 +9,7 @@ with raw as (
     )
 ),
 
+-- Select fields and clean
 cleaned as (
     select
         game_id,
@@ -35,4 +37,5 @@ cleaned as (
     where action is not null
 )
 
+-- Final output
 select * from cleaned

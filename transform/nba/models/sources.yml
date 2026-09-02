@@ -6,3 +6,7 @@ sources:
     tables:
       - name: nba_pbp
         description: "One JSON file per game. Path: s3://{S3_BUCKET_NAME}/bronze/nba_pbp/pbp_{game_id}_{date}.json"
+      - name: nba_game_log
+        description: "One JSON file per season (LeagueGameLog, team rows). Path: s3://{S3_BUCKET_NAME}/bronze/nba_game_log/game_log_{season}.json"
+      - name: nba_team_stats
+        description: "One JSON file per season per measure type (LeagueDashTeamStats). Path: s3://{S3_BUCKET_NAME}/bronze/nba_team_stats/team_stats_{measure_type}_{season}.json"

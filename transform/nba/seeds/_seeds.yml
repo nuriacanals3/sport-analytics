@@ -1,0 +1,15 @@
+version: 2
+
+seeds:
+  - name: nba_arenas
+    description: "Static reference: one row per current NBA team's home arena, coordinates, and timezone. Neutral-site games (Mexico City, Paris, Vegas Cup) are not covered -- a known, declared gap, same spirit as the haversine-not-real-routes approximation."
+    columns:
+      - name: team_abbreviation
+        tests: [not_null, unique]
+      - name: lat
+        tests: [not_null]
+      - name: lon
+        tests: [not_null]
+      - name: utc_offset_hours
+        description: "Standard (non-DST) UTC offset in hours. A declared simplification -- not DST-aware -- see team_travel_legs for why."
+        tests: [not_null]
