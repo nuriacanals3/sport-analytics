@@ -8,9 +8,11 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-AWS_ACCESS_KEY = os.getenv('AWS_ACCESS_KEY_ID')
-AWS_SECRET_KEY = os.getenv('AWS_SECRET_ACCESS_KEY')
+S3_ACCESS_KEY = os.getenv('B2_KEY_ID')
+S3_SECRET_KEY = os.getenv('B2_APP_KEY')
 S3_BUCKET = os.getenv('S3_BUCKET_NAME')
+S3_REGION = os.getenv('S3_REGION') or None
+S3_ENDPOINT_URL = os.getenv('S3_ENDPOINT_URL') or None
 S3_PREFIX = 'bronze/nba_pbp/'
 
 
@@ -36,8 +38,10 @@ def upload_to_s3(data, filename):
     """Uploads raw JSON data to the Bronze S3 bucket."""
     s3_client = boto3.client(
         's3',
-        aws_access_key_id=AWS_ACCESS_KEY,
-        aws_secret_access_key=AWS_SECRET_KEY
+        aws_access_key_id=S3_ACCESS_KEY,
+        aws_secret_access_key=S3_SECRET_KEY,
+        endpoint_url=S3_ENDPOINT_URL,
+        region_name=S3_REGION
     )
 
     s3_key = f"{S3_PREFIX}{filename}"

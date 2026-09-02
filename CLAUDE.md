@@ -102,3 +102,21 @@ No changes to existing code required.
 - Mart models → tables (fast reads for analysis)
 - Tests and documentation live in `_staging.yml` / `_marts.yml` alongside models
 - Reusable SQL logic goes in `transform/nba/macros/`
+
+## Ways of working (learning project)
+
+The goal of this project is for me to *understand* it, not just to have
+working code. For every phase:
+
+- Before writing code, explain what you're about to do and why, including
+  the main design choices and what you considered and rejected. Wait for
+  my OK.
+- Prefer clear, conventional code over clever code. If a line isn't
+  obvious, add a short comment on the intent.
+- After implementing, give a concise walkthrough: what each new file does,
+  how the pieces connect, and the 2–3 files I should read closely to
+  understand this phase.
+- For verification, tell me what we should check and why, and let me run
+  at least one check myself (a query, a script, a number to inspect)
+  before you confirm it works. Don't just tell me tests passed.
+- Assume I'll ask "why this and not that" — pre-empt it.
