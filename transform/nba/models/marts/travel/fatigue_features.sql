@@ -77,6 +77,12 @@ select
     ot.timezones_crossed                                                as opponent_timezones_crossed,
     st.timezones_crossed - ot.timezones_crossed                         as timezones_crossed_diff,
 
+    -- Signed version (positive = flew east, negative = flew west) -- this is
+    -- what Phase 3's regression actually uses, not the magnitude above.
+    st.timezones_crossed_signed                                         as self_timezones_shift,
+    ot.timezones_crossed_signed                                         as opponent_timezones_shift,
+    st.timezones_crossed_signed - ot.timezones_crossed_signed           as timezones_shift_diff,
+
     st.road_trip_length                                                 as self_road_trip_length,
     ot.road_trip_length                                                 as opponent_road_trip_length
 from paired p

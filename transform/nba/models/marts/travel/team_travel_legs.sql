@@ -78,6 +78,9 @@ select
         when curr_utc_offset_hours is null or prev_utc_offset_hours is null then null
         else curr_utc_offset_hours > prev_utc_offset_hours
     end                                                                    as is_eastward,
+    -- Same as timezones_crossed but signed, not absolute: positive = flew
+    -- east, negative = flew west, 0 = no change.
+    curr_utc_offset_hours - prev_utc_offset_hours                          as timezones_crossed_signed,
     -- Size of the current consecutive-away streak, repeated on every row in
     -- it (e.g. a 4-game road trip shows 4 on all 4 rows). Null on home games.
     case when not is_home then count(*) over (partition by team_id, season, is_home, streak_group) end as road_trip_length

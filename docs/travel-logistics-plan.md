@@ -191,14 +191,12 @@ Bronze/S3, following the existing `play_by_play.py` pattern; add `nba_arenas.csv
 back-to-back counts are plausible; `dbt test` passes.
 
 ### Phase 3 — Fatigue cost model (Python)
-**Build:** read `fatigue_features`; **temporal split** (train on older seasons, validate on the
-most recent — never mix future into past); a **baseline to beat** (e.g. home-court advantage only);
+**Build:** read `fatigue_features`; **temporal split** (train on older seasons, validate on the most recent — never mix future into past); a **baseline to beat** (e.g. home-court advantage only);
 start simple and interpretable (logistic/linear or gradient boosting) — the goal is *estimating
 effects*, not winning a prediction contest. Extract fatigue-feature coefficients as the **weights**.
 Save the model as a reusable artifact.
 **Improvement (optional, deferred):** add the player-depth block (minutes load, roster age).
-**Verify:** the fatigue model **beats the baseline** on the held-out season. If it does not, the
-cost feeding the optimiser is worthless — stop and reconsider before proceeding.
+**Verify:** the fatigue model **beats the baseline** on the held-out season. If it does not, the cost feeding the optimiser is worthless — stop and reconsider before proceeding.
 
 ### Phase 4 — Local-search engine + Phase A (geometric)
 **Build:**

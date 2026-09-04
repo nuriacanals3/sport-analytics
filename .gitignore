@@ -34,6 +34,11 @@ transform/*/profiles.yml
 transform/*/nba.duckdb
 
 # -----------------------------
+# MODELLING (regenerable via modelling/train.py)
+# -----------------------------
+modelling/artifacts/*.pkl
+
+# -----------------------------
 # IDE & OS FILES
 # -----------------------------
 .vscode/
