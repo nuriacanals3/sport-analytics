@@ -6,7 +6,7 @@ Built to learn the modern data stack end-to-end: Airflow for orchestration, S3-c
 
 Two things live here:
 1. **The core pipeline** — play-by-play ingestion → game/player/team box-score marts. Working, orchestrated daily.
-2. **Travel logistics** (in progress) — models NBA team travel across a season (distances, rest, back-to-backs, timezone crossings), and will eventually train a fatigue cost model and run schedule optimisation to explore lower-travel, lower-fatigue alternative schedules. See [docs/travel-logistics-plan.md](docs/travel-logistics-plan.md) for the full six-phase roadmap; Phases 1–2 (ingestion + dbt travel models) are done.
+2. **Travel logistics** (in progress) — models NBA team travel across a season (distances, rest, back-to-backs, timezone crossings), trains a fatigue cost model, and runs schedule optimisation to explore lower-travel, lower-fatigue alternative schedules. See [docs/travel-logistics-plan.md](docs/travel-logistics-plan.md) for the full six-phase roadmap; **Phases 1–4 are done** (ingestion, dbt travel models, fatigue cost model, local-search engine) — Phase 5 (dual objective + Pareto) is next.
 
 ---
 
@@ -37,14 +37,23 @@ NBA Stats API
               ├── team_travel_legs            (per-team-game: distance, rest, back-to-back, timezone crossing)
               ├── team_travel_season_summary  (per-team-season totals — a diagnostic view)
               └── fatigue_features            (team-game grain + opponent, differential features + target)
+      │
+      ▼  (Python, NOT dbt -- dbt's job stops at producing the feature table)
+[Model]   modelling/{features,train,cost_model}.py
+          Linear regression (statsmodels) on fatigue_features -> fatigue-feature weights
+      │
+      ▼
+[Optimise] optimization/{schedule,moves,search,geo,run_phase_a}.py
+          Local search (simulated annealing) over the real season's schedule, feasibility-
+          preserving moves, incremental delta evaluation -- Phase A objective is pure miles
 ```
 
-Orchestrated by an **Airflow DAG** running daily at 08:00 UTC (currently wires up the play-by-play path; the travel-logistics ingestion/dbt models run manually for now — see [docs/travel-logistics-plan.md](docs/travel-logistics-plan.md) section 4 on why those stay out of the daily DAG):
+Orchestrated by an **Airflow DAG** running daily at 08:00 UTC (currently wires up the play-by-play path; the travel-logistics ingestion/dbt models/Python layers all run manually for now — see [docs/travel-logistics-plan.md](docs/travel-logistics-plan.md) section 4 on why those stay out of the daily DAG):
 ```
 extract_nba_api_to_s3 → dbt_run_silver → dbt_run_gold → dbt_test
 ```
 
-**What's still ahead** (Phases 3–6 of the travel-logistics plan, not built yet): a Python cost model that learns fatigue weights from `fatigue_features`, a local-search schedule optimiser, a carbon/transport-scenario layer, and a Streamlit app reading precomputed results. None of this is dbt — it lives outside `transform/`, since dbt's job stops at producing the feature table.
+**What's still ahead** (Phases 5–6 of the travel-logistics plan, not built yet): the dual fatigue+carbon objective with a Pareto sweep over `λ`, a carbon/transport-scenario layer, and a Streamlit app reading precomputed results.
 
 ---
 
@@ -57,6 +66,8 @@ extract_nba_api_to_s3 → dbt_run_silver → dbt_run_gold → dbt_test
 | Storage | Any S3-compatible bucket (AWS S3, Backblaze B2, Cloudflare R2, ...) + boto3 |
 | Transformation | dbt-duckdb 1.10.1 |
 | Local warehouse | DuckDB (reads the bucket via `httpfs`) |
+| Fatigue model | statsmodels (linear OLS — chosen over scikit-learn for p-values/interpretability) |
+| Optimiser tests | pytest |
 | Language | Python 3.10 |
 
 ---
@@ -73,13 +84,23 @@ sport-analytics/
 ├── airflow/dags/nba_pipeline_dag.py  # Airflow DAG chaining the play-by-play path
 ├── docs/
 │   └── travel-logistics-plan.md  # Roadmap for the travel-logistics feature
-└── transform/nba/                # dbt project
-    ├── seeds/nba_arenas.csv      # Static arena coordinates, timezone, UTC offset
-    ├── macros/                   # Reusable SQL: parse_clock, haversine_miles
-    ├── models/staging/           # Silver: clean and flatten raw JSON
-    └── models/marts/
-        ├── game_summary.sql, player_game_stats.sql, team_game_stats.sql
-        └── travel/                # Gold: travel + fatigue models
+├── transform/nba/                # dbt project
+│   ├── seeds/nba_arenas.csv      # Static arena coordinates, timezone, UTC offset
+│   ├── macros/                   # Reusable SQL: parse_clock, haversine_miles
+│   ├── models/staging/           # Silver: clean and flatten raw JSON
+│   └── models/marts/
+│       ├── game_summary.sql, player_game_stats.sql, team_game_stats.sql
+│       └── travel/                # Gold: travel + fatigue models
+├── modelling/                     # Python, NOT dbt -- fatigue cost model
+│   ├── features.py, train.py, cost_model.py
+│   └── artifacts/fatigue_cost_model.pkl  # gitignored, regenerable via train.py
+├── optimization/                  # Python, NOT dbt -- schedule optimiser
+│   ├── schedule.py                # league schedule structure, neutral-site game handling
+│   ├── moves.py                   # feasibility-preserving moves
+│   ├── search.py                  # simulated annealing, incremental delta evaluation
+│   ├── geo.py                     # haversine (Python reimplementation, for the search's tight loop)
+│   └── run_phase_a.py             # Phase A: pure-miles objective, validates the engine
+└── tests/test_optimization.py    # haversine, move feasibility, incremental delta vs. full recompute
 ```
 
 Adding a new sport means creating `ingestion/{sport}/` and `transform/{sport}/` — no changes to existing code.
@@ -179,6 +200,13 @@ dbt run --select marts --project-dir transform/nba --profiles-dir transform/nba
 
 # Tests
 dbt test --project-dir transform/nba --profiles-dir transform/nba
+
+# Python -- fatigue cost model (Phase 3), reads fatigue_features, no credentials needed
+python -m modelling.train
+
+# Python -- schedule optimiser unit tests, then the Phase A (miles-only) search itself
+python -m pytest tests/test_optimization.py -v
+python -m optimization.run_phase_a
 ```
 
 ---

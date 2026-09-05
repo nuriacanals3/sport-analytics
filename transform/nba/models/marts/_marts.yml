@@ -14,7 +14,8 @@ models:
       - name: winner_location
         tests:
           - accepted_values:
-              values: ['home', 'away', 'tie']
+              arguments:
+                values: ['home', 'away', 'tie']
 
   - name: player_game_stats
     description: "Box score stats per player per game derived from play-by-play events"

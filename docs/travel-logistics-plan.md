@@ -5,6 +5,9 @@
 > Work through it **phase by phase** — each phase ends in something executable and verifiable.
 > Do not build later phases before an earlier phase's verification passes.
 
+> **Status (as of 2026-09-05): Phases 1–4 done and verified.** Phase 5 (dual objective + Pareto)
+> is next. See CLAUDE.md's "Architecture — travel logistics" section for the current file map.
+
 ---
 
 ## 1. Context & goal
@@ -171,28 +174,19 @@ notebooks/                  # NEW  construction & validation surface (phases 3�
 ## 5. Phases
 
 ### Phase 1 — Ingestion + seed
-**Build:** `league_game_log.py` (multi-season) and `team_season_stats.py` writing raw JSON to
-Bronze/S3, following the existing `play_by_play.py` pattern; add `nba_arenas.csv` seed.
-**Verify:** raw objects land in S3; `dbt seed` loads the arenas table; row counts are sane
-(~1,230 games/season × 2 team-rows).
+**Build:** `league_game_log.py` (multi-season) and `team_season_stats.py` writing raw JSON to Bronze/S3, following the existing `play_by_play.py` pattern; add `nba_arenas.csv` seed.
+**Verify:** raw objects land in S3; `dbt seed` loads the arenas table; row counts are sane (~1,230 games/season × 2 team-rows).
 
 ### Phase 2 — Travel + metrics models (dbt)
 **Build:**
 - `stg_game_log`, `stg_team_season_stats` (Silver).
-- `team_travel_legs` — one row per team per leg with: haversine distance from previous game city,
-  rest days, back-to-back flag, timezones crossed **and direction** (eastward flagged),
-  road-trip length, home/away.
+- `team_travel_legs` — one row per team per leg with: haversine distance from previous game city, rest days, back-to-back flag, timezones crossed **and direction** (eastward flagged), road-trip length, home/away.
 - `team_travel_season_summary` — per-team season totals.
-- `fatigue_features` — **team-game grain**, one row per team per game. Self-join `LeagueGameLog`
-  on `GAME_ID` to attach the opponent's row, then build **differential** features
-  (`rest_self − rest_opp`, `travel_self − travel_opp`, …), plus own/opponent net rating, home/away,
-  and the target `PLUS_MINUS`.
-**Verify:** query the marts; totals match expectation (e.g. known heavy-travel teams rank high);
-back-to-back counts are plausible; `dbt test` passes.
+- `fatigue_features` — **team-game grain**, one row per team per game. Self-join `LeagueGameLog` on `GAME_ID` to attach the opponent's row, then build **differential** features (`rest_self − rest_opp`, `travel_self − travel_opp`, …), plus own/opponent net rating, home/away, and the target `PLUS_MINUS`.
+**Verify:** query the marts; totals match expectation (e.g. known heavy-travel teams rank high); back-to-back counts are plausible; `dbt test` passes.
 
 ### Phase 3 — Fatigue cost model (Python)
-**Build:** read `fatigue_features`; **temporal split** (train on older seasons, validate on the most recent — never mix future into past); a **baseline to beat** (e.g. home-court advantage only);
-start simple and interpretable (logistic/linear or gradient boosting) — the goal is *estimating
+**Build:** read `fatigue_features`; **temporal split** (train on older seasons, validate on the most recent — never mix future into past); a **baseline to beat** (e.g. home-court advantage only); start simple and interpretable (logistic/linear or gradient boosting) — the goal is *estimating
 effects*, not winning a prediction contest. Extract fatigue-feature coefficients as the **weights**.
 Save the model as a reusable artifact.
 **Improvement (optional, deferred):** add the player-depth block (minutes load, roster age).
@@ -205,43 +199,30 @@ Save the model as a reusable artifact.
   - **date swap** (swap the dates of two of a team's games),
   - **home-and-home leg swap** (for a pair playing twice, swap which date is at which arena),
   - **road-trip reorder** (permute consecutive away games within fixed dates).
-- Hard constraints enforced by the move set: **one game per team per day**, **one game per arena
-  per day**, **cap on consecutive away games** (parameter `K`, e.g. 6). The fixture multiset
-  (who plays whom, home/away balance, 82 games/team, fixed date window) is preserved — moves only
-  change ordering/dates.
-- `search.py` — start from the real (feasible) schedule; propose random feasible moves; accept by
-  simulated-annealing rule; track best. **Incremental (delta) evaluation**: a move touches only a
-  few teams' legs — recompute only those.
-- `run_phase_a.py` — objective = **total league miles** (pure geometry, no model). This validates
-  the whole engine cheaply.
-**Verify:** output schedule is feasible; total miles ≤ real schedule; the best-tracked solution
-never exceeds the real baseline.
+- Hard constraints enforced by the move set: **one game per team per day**, **one game per arena per day**, **cap on consecutive away games** (parameter `K`, e.g. 6). The fixture multiset (who plays whom, home/away balance, 82 games/team, fixed date window) is preserved — moves only change ordering/dates.
+- `search.py` — start from the real (feasible) schedule; propose random feasible moves; accept by simulated-annealing rule; track best. **Incremental (delta) evaluation**: a move touches only a few teams' legs — recompute only those.
+- `run_phase_a.py` — objective = **total league miles** (pure geometry, no model). This validates the whole engine cheaply.
+**Verify:** output schedule is feasible; total miles ≤ real schedule; the best-tracked solution never exceeds the real baseline.
 
 ### Phase 5 — Phase B (dual objective + Pareto)
 **Build:** `objectives.py` fatigue burden `F(S) = Σ_{team-game} Σ_k β_k · feature_k` (β from the
 Phase 3 model, taken as positive burden) and carbon `C(S) = Σ_legs miles · charter_factor`.
 Combined objective for weight `λ ∈ [0,1]`: `minimise (1−λ)·F_norm + λ·C_norm` (normalise each to
 comparable scale). `run_phase_b.py` sweeps a `λ` grid → a set of optimised schedules.
-**Must write artifacts:** for each `λ`, persist the optimised schedule and its
-(total miles, fatigue burden, carbon, **per-team distribution**), plus the real schedule's values
+**Must write artifacts:** for each `λ`, persist the optimised schedule and its (total miles, fatigue burden, carbon, **per-team distribution**), plus the real schedule's values
 as the baseline point. Save as parquet / DuckDB for the app.
-**Verify:** Pareto frontier is monotone/sensible; the real NBA point sits above/behind the frontier;
-artifacts are on disk and self-describing.
+**Verify:** Pareto frontier is monotone/sensible; the real NBA point sits above/behind the frontier; artifacts are on disk and self-describing.
 
 ### Phase 6 — Transport scenarios + Streamlit output
 **Build:**
-- `carbon/scenarios.py` — apply charter / commercial / SAF emission factors to an optimised
-  schedule (posterior layer, not in the optimiser). Note team travelling party ≈ 40–50 people;
-  charter emissions are **per-aircraft**, commercial **per-passenger** (much lower CO₂ but worse
-  recovery — the interesting tension).
+- `carbon/scenarios.py` — apply charter / commercial / SAF emission factors to an optimised schedule (posterior layer, not in the optimiser). Note team travelling party ≈ 40–50 people; charter emissions are **per-aircraft**, commercial **per-passenger** (much lower CO₂ but worse recovery — the interesting tension).
 - `app/streamlit_app.py` — reads precomputed artifacts + DuckDB **only**. Views:
   1. miles + CO₂ saved, real vs optimised;
   2. per-team route map before/after (pydeck arc layers);
   3. Pareto frontier with a `λ` slider, real-NBA point marked;
   4. fatigue distribution across teams (the equity angle);
   5. transport-scenario toggle on top.
-**Verify:** app loads instantly (no optimisation at runtime); every widget navigates precomputed
-results; deploys on Streamlit Community Cloud from the repo (ship the DuckDB / parquets, they are small).
+**Verify:** app loads instantly (no optimisation at runtime); every widget navigates precomputed results; deploys on Streamlit Community Cloud from the repo (ship the DuckDB / parquets, they are small).
 
 ---
 

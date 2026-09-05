@@ -159,7 +159,7 @@ dbt_test               (BashOperator: dbt test)
 
 **Why BashOperator for dbt?** The simplest approach for local learning. The BashOperator runs dbt as a CLI command. More advanced setups use [astronomer-cosmos](https://github.com/astronomer/astronomer-cosmos) which generates one Airflow task per dbt model, giving finer visibility — worth exploring once you understand the basics.
 
-**Credential passing:** The BashOperator inherits `os.environ` from the Airflow process. This means Airflow must be started from a shell that has the AWS credentials exported:
+**Credential passing:** The BashOperator inherits `os.environ` from the Airflow process. This means Airflow must be started from a shell that has the storage credentials exported (see CLAUDE.md's "Environment Variables" section for the current variable names):
 ```bash
 export $(cat .env | xargs) && airflow standalone
 ```
