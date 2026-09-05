@@ -12,6 +12,7 @@ from optimization.geo import haversine_miles
 
 DUCKDB_PATH = 'transform/nba/nba.duckdb'
 SEASON = '2024-25'  # the optimisation case study season
+_printed_neutral_site_note = False
 
 # Real NBA neutral-site games in 2024-25. Neither team actually plays at their own arena for
 # these, so both teams' travel legs need the real venue, not either team's
@@ -28,6 +29,13 @@ NEUTRAL_VENUE_COORDS = {
     'MEXICO_CITY': (19.4534, -99.1425),
     'VEGAS_CUP': (36.1028, -115.1786),
     'PARIS': (48.8389, 2.3789),
+}
+# Standard (non-DST) UTC offsets, same static-offset convention as nba_arenas.csv
+# (America/Mexico_City has no DST since 2022; Las Vegas is Pacific; Paris is CET).
+NEUTRAL_VENUE_UTC_OFFSETS = {
+    'MEXICO_CITY': -6,
+    'VEGAS_CUP': -8,
+    'PARIS': 1,
 }
 
 # Real designated "home" team for bookkeeping purposes (the 82-games/team
@@ -52,9 +60,10 @@ class Game:
 
 
 class Schedule:
-    def __init__(self, games, arena_coords):
+    def __init__(self, games, arena_coords, arena_utc_offsets):
         self.games = {g.game_id: g for g in games}
         self.arena_coords = arena_coords  # {team_abbreviation: (lat, lon)}
+        self.arena_utc_offsets = arena_utc_offsets  # {team_abbreviation: utc_offset_hours}
         self._team_game_ids = self._build_team_index()
 
     def _build_team_index(self):
@@ -98,23 +107,42 @@ class Schedule:
             return True
         return self.games[game_id].away_team == team
 
-    def team_leg_distances(self, team):
-        """[(game_id, distance_from_previous_game)] for this team's full
-        sorted schedule. First game of the season has no previous leg (0.0,
-        matching how SUM() ignores NULLs in the dbt equivalent).
+    def team_leg_details(self, team):
+        """[(game_id, distance_miles, rest_days, is_back_to_back, timezones_crossed)]
+        for this team's full sorted schedule. First game of the season has no
+        previous leg -- distance is 0.0 (matches how SUM() ignores NULLs in
+        the dbt equivalent), and rest_days/is_back_to_back/timezones_crossed
+        are None (genuinely unknown, not "no back-to-back" -- there's no
+        season-boundary game to compare against).
         """
         gids = self.team_schedule(team)
         legs = []
         prev_loc = None
+        prev_date = None
         for gid in gids:
             loc = self.location_for(gid, team)
+            date = self.games[gid].date
             if prev_loc is None:
                 dist = 0.0
+                rest_days = None
+                is_back_to_back = None
+                timezones_crossed = None
             else:
                 dist = haversine_miles(*self.arena_coords[prev_loc], *self.arena_coords[loc])
-            legs.append((gid, dist))
+                rest_days = (date - prev_date).days - 1
+                is_back_to_back = (rest_days == 0)
+                timezones_crossed = abs(self.arena_utc_offsets[loc] - self.arena_utc_offsets[prev_loc])
+            legs.append((gid, dist, rest_days, is_back_to_back, timezones_crossed))
             prev_loc = loc
+            prev_date = date
         return legs
+
+    def team_leg_distances(self, team):
+        """[(game_id, distance_from_previous_game)] -- thin wrapper over
+        team_leg_details for callers that only need distance (Phase 4's
+        miles-only objective, search.py's incremental delta).
+        """
+        return [(gid, dist) for gid, dist, *_ in self.team_leg_details(team)]
 
     def total_miles(self):
         """Full recompute: sum of every team's own leg distances. This is the
@@ -163,11 +191,16 @@ def load_schedule(duckdb_path=DUCKDB_PATH, season=SEASON):
         order by game_id, team_id
     """, [season]).fetchall()
 
-    arena_rows = con.execute("select team_abbreviation, lat, lon from nba_arenas").fetchall()
+    arena_rows = con.execute(
+        "select team_abbreviation, lat, lon, utc_offset_hours from nba_arenas"
+    ).fetchall()
     con.close()
 
-    arena_coords = {abbr: (lat, lon) for abbr, lat, lon in arena_rows}
+    arena_coords = {abbr: (lat, lon) for abbr, lat, lon, _ in arena_rows}
     arena_coords.update(NEUTRAL_VENUE_COORDS)
+
+    arena_utc_offsets = {abbr: utc_offset for abbr, _, _, utc_offset in arena_rows}
+    arena_utc_offsets.update(NEUTRAL_VENUE_UTC_OFFSETS)
 
     by_game = defaultdict(list)
     for game_id, game_date, team_id, team_abbr, opp_abbr, is_home in rows:
@@ -199,9 +232,15 @@ def load_schedule(duckdb_path=DUCKDB_PATH, season=SEASON):
             away_team = abbrs[1] if home_team == abbrs[0] else abbrs[0]
         games.append(Game(game_id=game_id, date=game_date, home_team=home_team, away_team=away_team))
 
-    if no_home_marked_game_ids:
+    # Print this note only once per process -- callers like run_phase_b.py
+    # reload the schedule dozens of times in a single run, and the note
+    # would otherwise repeat identically every time, drowning out real
+    # progress output for no new information.
+    global _printed_neutral_site_note
+    if no_home_marked_game_ids and not _printed_neutral_site_note:
         print(f"Note: {len(no_home_marked_game_ids)} game(s) had no marked home team in the "
               f"source data -- confirmed real neutral-site games (Mexico City / Vegas Cup / "
               f"Paris), handled via NEUTRAL_SITE_VENUES: {no_home_marked_game_ids}")
+        _printed_neutral_site_note = True
 
-    return Schedule(games, arena_coords)
+    return Schedule(games, arena_coords, arena_utc_offsets)

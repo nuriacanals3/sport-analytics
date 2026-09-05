@@ -5,8 +5,10 @@
 > Work through it **phase by phase** — each phase ends in something executable and verifiable.
 > Do not build later phases before an earlier phase's verification passes.
 
-> **Status (as of 2026-09-05): Phases 1–4 done and verified.** Phase 5 (dual objective + Pareto)
-> is next. See CLAUDE.md's "Architecture — travel logistics" section for the current file map.
+> **Status (as of 2026-09-05): Phases 1–5 done and verified.** Phase 6 (transport scenarios +
+> Streamlit) is next. See CLAUDE.md's "Architecture — travel logistics" section for the current
+> file map. Phase 5 has one disclosed, accepted gap: 3 of 11 lambda points (0.7-0.9) found no
+> real improvement over the real schedule -- see optimization/run_phase_b.py's module docstring.
 
 ---
 

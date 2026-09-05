@@ -8,9 +8,9 @@ Automated NBA data pipeline using a Medallion architecture:
 
 A second feature, **travel logistics**, sits alongside this: models NBA team travel across a
 season (distances, fatigue, timezones) and runs schedule optimisation to explore lower-travel
-alternative schedules. Full six-phase roadmap in `docs/travel-logistics-plan.md`. **Phases 1-4
-are done** (ingestion, dbt travel models, fatigue cost model, local-search engine); Phase 5
-(dual objective + Pareto) is next.
+alternative schedules. Full six-phase roadmap in `docs/travel-logistics-plan.md`. **Phases 1-5
+are done** (ingestion, dbt travel models, fatigue cost model, local-search engine, dual
+fatigue+carbon Pareto sweep); Phase 6 (transport scenarios + Streamlit) is next.
 
 ## Architecture — core pipeline
 ```
@@ -39,7 +39,8 @@ nba_api → ingestion/nba/{league_game_log,team_season_stats}.py → bucket (bro
                                                ↓
    modelling/{features,train,cost_model}.py  (Python, NOT dbt -- linear regression, fatigue weights)
                                                ↓
-   optimization/{schedule,moves,search,geo,run_phase_a}.py  (Python, NOT dbt -- local search / SA)
+   optimization/{schedule,moves,search,geo,objectives,run_phase_a,run_phase_b}.py
+                                               (Python, NOT dbt -- local search / SA, Pareto sweep)
 ```
 This half is **offline, run-once-per-analysis** -- deliberately kept out of the daily Airflow DAG
 (see the plan doc for why). `tests/test_optimization.py` covers the deterministic, easy-to-get-wrong
@@ -119,6 +120,7 @@ dbt docs generate && dbt docs serve # browse model docs in browser
 # Travel-logistics Python layers (from repo root, outside transform/nba/)
 python -m modelling.train           # refit the fatigue cost model, print RMSE/R² vs baseline
 python -m optimization.run_phase_a  # run the local-search engine (Phase A, miles-only objective)
+python -m optimization.run_phase_b  # Pareto sweep (Phase B, fatigue+carbon) -- writes parquet artifacts
 python -m pytest tests/test_optimization.py -v   # optimiser unit tests
 ```
 

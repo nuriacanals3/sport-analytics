@@ -102,10 +102,11 @@ def test_incremental_delta_matches_full_recompute(schedule):
             continue
 
         miles_before = schedule.total_miles()
-        delta, undo = apply_and_get_delta(schedule, changes)
+        delta_components, undo = apply_and_get_delta(schedule, changes)
         miles_after_full_recompute = schedule.total_miles()
 
-        assert miles_after_full_recompute - miles_before == pytest.approx(delta, abs=1e-6)
+        # Phase A's default component is (total_miles,) -- a 1-tuple.
+        assert miles_after_full_recompute - miles_before == pytest.approx(delta_components[0], abs=1e-6)
         checked += 1
 
         # leave the schedule as the (accepted) new state for the next iteration

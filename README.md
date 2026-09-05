@@ -6,7 +6,7 @@ Built to learn the modern data stack end-to-end: Airflow for orchestration, S3-c
 
 Two things live here:
 1. **The core pipeline** — play-by-play ingestion → game/player/team box-score marts. Working, orchestrated daily.
-2. **Travel logistics** (in progress) — models NBA team travel across a season (distances, rest, back-to-backs, timezone crossings), trains a fatigue cost model, and runs schedule optimisation to explore lower-travel, lower-fatigue alternative schedules. See [docs/travel-logistics-plan.md](docs/travel-logistics-plan.md) for the full six-phase roadmap; **Phases 1–4 are done** (ingestion, dbt travel models, fatigue cost model, local-search engine) — Phase 5 (dual objective + Pareto) is next.
+2. **Travel logistics** (in progress) — models NBA team travel across a season (distances, rest, back-to-backs, timezone crossings), trains a fatigue cost model, and runs schedule optimisation (including a dual fatigue+carbon Pareto sweep) to explore lower-travel, lower-fatigue, lower-carbon alternative schedules. See [docs/travel-logistics-plan.md](docs/travel-logistics-plan.md) for the full six-phase roadmap; **Phases 1–5 are done** (ingestion, dbt travel models, fatigue cost model, local-search engine, Pareto sweep) — Phase 6 (transport scenarios + Streamlit) is next.
 
 ---
 
@@ -43,9 +43,10 @@ NBA Stats API
           Linear regression (statsmodels) on fatigue_features -> fatigue-feature weights
       │
       ▼
-[Optimise] optimization/{schedule,moves,search,geo,run_phase_a}.py
+[Optimise] optimization/{schedule,moves,search,geo,objectives,run_phase_a,run_phase_b}.py
           Local search (simulated annealing) over the real season's schedule, feasibility-
-          preserving moves, incremental delta evaluation -- Phase A objective is pure miles
+          preserving moves, incremental delta evaluation -- Phase A objective is pure miles;
+          Phase B sweeps lambda over a fatigue+carbon Pareto frontier, writes parquet artifacts
 ```
 
 Orchestrated by an **Airflow DAG** running daily at 08:00 UTC (currently wires up the play-by-play path; the travel-logistics ingestion/dbt models/Python layers all run manually for now — see [docs/travel-logistics-plan.md](docs/travel-logistics-plan.md) section 4 on why those stay out of the daily DAG):
@@ -53,7 +54,7 @@ Orchestrated by an **Airflow DAG** running daily at 08:00 UTC (currently wires u
 extract_nba_api_to_s3 → dbt_run_silver → dbt_run_gold → dbt_test
 ```
 
-**What's still ahead** (Phases 5–6 of the travel-logistics plan, not built yet): the dual fatigue+carbon objective with a Pareto sweep over `λ`, a carbon/transport-scenario layer, and a Streamlit app reading precomputed results.
+**What's still ahead** (Phase 6 of the travel-logistics plan, not built yet): a carbon/transport-scenario layer (commercial/SAF comparisons against the charter baseline) and a Streamlit app reading the precomputed Pareto artifacts.
 
 ---
 
@@ -99,7 +100,10 @@ sport-analytics/
 │   ├── moves.py                   # feasibility-preserving moves
 │   ├── search.py                  # simulated annealing, incremental delta evaluation
 │   ├── geo.py                     # haversine (Python reimplementation, for the search's tight loop)
-│   └── run_phase_a.py             # Phase A: pure-miles objective, validates the engine
+│   ├── objectives.py              # fatigue burden (uses the cost model) + carbon
+│   ├── run_phase_a.py             # Phase A: pure-miles objective, validates the engine
+│   ├── run_phase_b.py             # Phase B: lambda sweep -> Pareto artifacts (parquet)
+│   └── artifacts/pareto_results/  # gitignored, regenerable via run_phase_b.py
 └── tests/test_optimization.py    # haversine, move feasibility, incremental delta vs. full recompute
 ```
 
@@ -204,9 +208,10 @@ dbt test --project-dir transform/nba --profiles-dir transform/nba
 # Python -- fatigue cost model (Phase 3), reads fatigue_features, no credentials needed
 python -m modelling.train
 
-# Python -- schedule optimiser unit tests, then the Phase A (miles-only) search itself
+# Python -- schedule optimiser unit tests, then Phase A (miles-only), then Phase B (Pareto sweep)
 python -m pytest tests/test_optimization.py -v
 python -m optimization.run_phase_a
+python -m optimization.run_phase_b
 ```
 
 ---

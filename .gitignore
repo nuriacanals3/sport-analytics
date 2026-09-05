@@ -39,6 +39,11 @@ transform/*/nba.duckdb
 modelling/artifacts/*.pkl
 
 # -----------------------------
+# OPTIMIZATION (regenerable via optimization/run_phase_b.py)
+# -----------------------------
+optimization/artifacts/pareto_results/*.parquet
+
+# -----------------------------
 # IDE & OS FILES
 # -----------------------------
 .vscode/
