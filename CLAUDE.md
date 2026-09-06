@@ -138,7 +138,9 @@ streamlit run app/streamlit_app.py
 ```
 Deploying to Streamlit Community Cloud: point its "Python dependencies file" setting at
 `app/requirements.txt` (a separate, minimal pin set verified in isolation), not the repo root's
-`requirements.txt` (which drags in Apache Airflow's whole dependency tree for no reason).
+`requirements.txt` (which drags in Apache Airflow's whole dependency tree for no reason). Also
+set its Python version to 3.10 -- the one version those pins were actually verified against,
+unrelated to why the rest of this project needs 3.10 (that's Airflow; this app doesn't use it).
 
 ## Environment Variables
 Stored in `.env` at project root (gitignored). Storage is **Backblaze B2, not AWS** (the original

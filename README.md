@@ -235,7 +235,11 @@ transitive dependencies), NOT the repo root's `requirements.txt` (which covers t
 including Apache Airflow's large dependency tree that the app never imports). When creating the
 app on [share.streamlit.io](https://share.streamlit.io), set main file path to
 `app/streamlit_app.py` and, under Advanced settings, point "Python dependencies file" at
-`app/requirements.txt` instead of the default root one.
+`app/requirements.txt` instead of the default root one. Also set Python version to **3.10**
+there -- not because the app needs it the way Airflow does elsewhere in this project, but
+because 3.10 is the only version `app/requirements.txt`'s exact pins were actually verified
+against (an isolated venv, `AppTest` run against every widget); a newer default (e.g. 3.14)
+might work too, just untested -- re-verify the pins in that Python version first if you switch.
 
 ---
 
