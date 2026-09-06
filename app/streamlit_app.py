@@ -88,7 +88,7 @@ EU_LOCALE = alt.Locale(number=alt.NumberLocale(
 summary, per_team, schedules, arenas = load_artifacts()
 LAMBDA_GRID = sorted(summary.loc[summary['lambda'].notna(), 'lambda'].unique())
 
-st.title('NBA Travel Logistics')
+st.title('NBA Travel Logistics 2024/2025')
 st.caption(
     'Every number below comes from a precomputed optimisation run'
 )
