@@ -6,7 +6,7 @@ Built to learn the modern data stack end-to-end: Airflow for orchestration, S3-c
 
 Two things live here:
 1. **The core pipeline** — play-by-play ingestion → game/player/team box-score marts. Working, orchestrated daily.
-2. **Travel logistics** (in progress) — models NBA team travel across a season (distances, rest, back-to-backs, timezone crossings), trains a fatigue cost model, and runs schedule optimisation (including a dual fatigue+carbon Pareto sweep) to explore lower-travel, lower-fatigue, lower-carbon alternative schedules. See [docs/travel-logistics-plan.md](docs/travel-logistics-plan.md) for the full six-phase roadmap; **Phases 1–5 are done** (ingestion, dbt travel models, fatigue cost model, local-search engine, Pareto sweep) — Phase 6 (transport scenarios + Streamlit) is next.
+2. **Travel logistics** — models NBA team travel across a season (distances, rest, back-to-backs, timezone crossings), trains a fatigue cost model, runs schedule optimisation (including a dual fatigue+carbon Pareto sweep), and compares transport scenarios (charter/commercial/SAF) in a Streamlit app. See [docs/travel-logistics-plan.md](docs/travel-logistics-plan.md) for the full six-phase roadmap; **all six phases are done and verified**. The app runs locally (`streamlit run app/streamlit_app.py`); Streamlit Community Cloud deployment is next.
 
 ---
 
@@ -47,6 +47,12 @@ NBA Stats API
           Local search (simulated annealing) over the real season's schedule, feasibility-
           preserving moves, incremental delta evaluation -- Phase A objective is pure miles;
           Phase B sweeps lambda over a fatigue+carbon Pareto frontier, writes parquet artifacts
+      │
+      ▼
+[Present] carbon/scenarios.py (charter/commercial/SAF CO2, a posterior layer, not in the
+          optimiser) + app/streamlit_app.py (reads ONLY the parquet artifacts above --
+          no DuckDB/B2 credentials at runtime -- two tabs: league-wide totals/frontier/
+          transport scenarios, and a per-team route map + Schedule Board + equity view)
 ```
 
 Orchestrated by an **Airflow DAG** running daily at 08:00 UTC (currently wires up the play-by-play path; the travel-logistics ingestion/dbt models/Python layers all run manually for now — see [docs/travel-logistics-plan.md](docs/travel-logistics-plan.md) section 4 on why those stay out of the daily DAG):
@@ -54,7 +60,8 @@ Orchestrated by an **Airflow DAG** running daily at 08:00 UTC (currently wires u
 extract_nba_api_to_s3 → dbt_run_silver → dbt_run_gold → dbt_test
 ```
 
-**What's still ahead** (Phase 6 of the travel-logistics plan, not built yet): a carbon/transport-scenario layer (commercial/SAF comparisons against the charter baseline) and a Streamlit app reading the precomputed Pareto artifacts.
+**Status**: all six phases of the travel-logistics plan are done and verified. The Streamlit
+app runs locally; deploying it to Streamlit Community Cloud is the next action.
 
 ---
 
@@ -69,6 +76,7 @@ extract_nba_api_to_s3 → dbt_run_silver → dbt_run_gold → dbt_test
 | Local warehouse | DuckDB (reads the bucket via `httpfs`) |
 | Fatigue model | statsmodels (linear OLS — chosen over scikit-learn for p-values/interpretability) |
 | Optimiser tests | pytest |
+| App | Streamlit + pydeck (route maps) + Altair (Pareto frontier, fatigue bar chart) |
 | Language | Python 3.10 |
 
 ---
@@ -103,7 +111,10 @@ sport-analytics/
 │   ├── objectives.py              # fatigue burden (uses the cost model) + carbon
 │   ├── run_phase_a.py             # Phase A: pure-miles objective, validates the engine
 │   ├── run_phase_b.py             # Phase B: lambda sweep -> Pareto artifacts (parquet)
-│   └── artifacts/pareto_results/  # gitignored, regenerable via run_phase_b.py
+│   ├── export_arenas.py           # one-off: arena lat/lon/name -> parquet, for the app
+│   └── artifacts/pareto_results/  # gitignored, regenerable via run_phase_b.py + export_arenas.py
+├── carbon/scenarios.py             # Python, posterior layer -- charter/commercial/SAF CO2
+├── app/streamlit_app.py            # Streamlit app -- reads only the parquet artifacts above
 └── tests/test_optimization.py    # haversine, move feasibility, incremental delta vs. full recompute
 ```
 
@@ -212,6 +223,10 @@ python -m modelling.train
 python -m pytest tests/test_optimization.py -v
 python -m optimization.run_phase_a
 python -m optimization.run_phase_b
+python -m optimization.export_arenas   # arena lat/lon/name -> parquet, for the app below
+
+# Streamlit app -- reads only the parquet artifacts written above, no credentials needed
+streamlit run app/streamlit_app.py
 ```
 
 ---

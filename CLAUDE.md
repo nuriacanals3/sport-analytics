@@ -8,9 +8,11 @@ Automated NBA data pipeline using a Medallion architecture:
 
 A second feature, **travel logistics**, sits alongside this: models NBA team travel across a
 season (distances, fatigue, timezones) and runs schedule optimisation to explore lower-travel
-alternative schedules. Full six-phase roadmap in `docs/travel-logistics-plan.md`. **Phases 1-5
-are done** (ingestion, dbt travel models, fatigue cost model, local-search engine, dual
-fatigue+carbon Pareto sweep); Phase 6 (transport scenarios + Streamlit) is next.
+alternative schedules. Full six-phase roadmap in `docs/travel-logistics-plan.md`. **All six
+phases are done** (ingestion, dbt travel models, fatigue cost model, local-search engine, dual
+fatigue+carbon Pareto sweep, transport-scenario comparison + Streamlit app). The Streamlit app
+(`app/streamlit_app.py`) is verified running locally; Streamlit Community Cloud deployment is
+the next action, not yet done.
 
 ## Architecture — core pipeline
 ```
@@ -39,8 +41,13 @@ nba_api → ingestion/nba/{league_game_log,team_season_stats}.py → bucket (bro
                                                ↓
    modelling/{features,train,cost_model}.py  (Python, NOT dbt -- linear regression, fatigue weights)
                                                ↓
-   optimization/{schedule,moves,search,geo,objectives,run_phase_a,run_phase_b}.py
+   optimization/{schedule,moves,search,geo,objectives,run_phase_a,run_phase_b,export_arenas}.py
                                                (Python, NOT dbt -- local search / SA, Pareto sweep)
+                                               ↓
+   carbon/scenarios.py  (Python, posterior layer -- charter/commercial/SAF CO2, not in the optimiser)
+                                               ↓
+   app/streamlit_app.py  (Streamlit -- reads ONLY optimization/artifacts/pareto_results/*.parquet,
+                           no DuckDB/B2 credentials at runtime; two tabs, league-wide + per-team)
 ```
 This half is **offline, run-once-per-analysis** -- deliberately kept out of the daily Airflow DAG
 (see the plan doc for why). `tests/test_optimization.py` covers the deterministic, easy-to-get-wrong
@@ -60,6 +67,8 @@ pieces (haversine, move feasibility, incremental delta vs. full recompute).
 | dbt macros | `transform/nba/macros/` |
 | Fatigue cost model (Python, not dbt) | `modelling/` |
 | Schedule optimiser (Python, not dbt) | `optimization/` |
+| Transport-scenario carbon (Python, posterior layer) | `carbon/scenarios.py` |
+| Streamlit app | `app/streamlit_app.py` |
 | Optimiser unit tests | `tests/test_optimization.py` |
 | Travel-logistics roadmap | `docs/travel-logistics-plan.md` |
 | Storage credentials | `.env` (gitignored) |
@@ -121,7 +130,11 @@ dbt docs generate && dbt docs serve # browse model docs in browser
 python -m modelling.train           # refit the fatigue cost model, print RMSE/R² vs baseline
 python -m optimization.run_phase_a  # run the local-search engine (Phase A, miles-only objective)
 python -m optimization.run_phase_b  # Pareto sweep (Phase B, fatigue+carbon) -- writes parquet artifacts
+python -m optimization.export_arenas  # one-off: arena lat/lon/name -> parquet, for the Streamlit app
 python -m pytest tests/test_optimization.py -v   # optimiser unit tests
+
+# Streamlit app (reads only the parquet artifacts above, no DuckDB/B2 credentials needed)
+streamlit run app/streamlit_app.py
 ```
 
 ## Environment Variables
@@ -160,6 +173,7 @@ No changes to existing code required.
 - nba_api v1.11.4
 - statsmodels (Phase 3 fatigue cost model — linear OLS, not scikit-learn, for p-values/interpretability)
 - pytest (optimiser unit tests only — see `tests/test_optimization.py`)
+- Streamlit + pydeck (route maps) + Altair (Pareto frontier, fatigue bar chart) — the Phase 6 app
 
 ## Conventions
 - dbt model naming: `stg_{source}__{entity}.sql` for staging, `{entity}.sql` for marts

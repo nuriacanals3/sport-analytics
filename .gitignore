@@ -42,6 +42,14 @@ modelling/artifacts/*.pkl
 # OPTIMIZATION (regenerable via optimization/run_phase_b.py)
 # -----------------------------
 optimization/artifacts/pareto_results/*.parquet
+# Exception: these 4 ARE committed on purpose. Streamlit Community Cloud
+# deploys by cloning the repo -- it never runs run_phase_b.py/export_arenas.py
+# or touches B2 -- so app/streamlit_app.py needs them checked in to work
+# there. Still small, still regenerable locally; just no longer gitignored.
+!optimization/artifacts/pareto_results/summary.parquet
+!optimization/artifacts/pareto_results/per_team.parquet
+!optimization/artifacts/pareto_results/schedules.parquet
+!optimization/artifacts/pareto_results/arenas.parquet
 
 # -----------------------------
 # IDE & OS FILES
