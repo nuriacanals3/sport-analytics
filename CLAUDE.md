@@ -136,6 +136,9 @@ python -m pytest tests/test_optimization.py -v   # optimiser unit tests
 # Streamlit app (reads only the parquet artifacts above, no DuckDB/B2 credentials needed)
 streamlit run app/streamlit_app.py
 ```
+Deploying to Streamlit Community Cloud: point its "Python dependencies file" setting at
+`app/requirements.txt` (a separate, minimal pin set verified in isolation), not the repo root's
+`requirements.txt` (which drags in Apache Airflow's whole dependency tree for no reason).
 
 ## Environment Variables
 Stored in `.env` at project root (gitignored). Storage is **Backblaze B2, not AWS** (the original

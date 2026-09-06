@@ -229,6 +229,14 @@ python -m optimization.export_arenas   # arena lat/lon/name -> parquet, for the 
 streamlit run app/streamlit_app.py
 ```
 
+**Deploying the app to Streamlit Community Cloud:** the app only needs `app/requirements.txt`
+(a minimal, separately-pinned set -- streamlit/pydeck/altair/duckdb/statsmodels and their real
+transitive dependencies), NOT the repo root's `requirements.txt` (which covers the whole project,
+including Apache Airflow's large dependency tree that the app never imports). When creating the
+app on [share.streamlit.io](https://share.streamlit.io), set main file path to
+`app/streamlit_app.py` and, under Advanced settings, point "Python dependencies file" at
+`app/requirements.txt` instead of the default root one.
+
 ---
 
 ## Querying the Data
